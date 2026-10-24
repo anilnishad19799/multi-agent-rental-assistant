@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Real Estate Rent Agent</title>
+    <link rel="stylesheet" href="styles.css?v=3">
+</head>
+<body>
+
+<div id="app">
+    <h1>🏠 Real Estate Rent Agent</h1>
+    <p class="subtitle">Multi-Agent AI System — Find your perfect PG or flat</p>
+
+    <div id="chat-box"></div>
+
+    <form id="chat-form">
+
+        <!-- MODEL SELECT -->
+        <select id="model-select">
+            <option value="openai">OpenAI</option>
+            <option value="groq" selected>Groq</option>
+            <option value="gemini">Gemini</option>
+        </select>
+
+        <input type="text" id="user-input"
+               placeholder="Ask about rental properties..."
+               autocomplete="off">
+
+        <button type="submit" id="send-btn">Send</button>
+        <button type="button" onclick="newConversation()" class="new-chat-btn">New Chat</button>
+    </form>
+</div>
+
+<script src="stream_handler.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>

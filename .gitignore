@@ -1,0 +1,28 @@
+# Environment variables
+.env
+.env.local
+
+# Byte-compiled / cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Local SQLite databases
+*.db
+*.sqlite3
+rental_system.db
+real_estate.db
+
+# OS files
+.DS_Store
+Thumbs.db
+
+conversation_flow.txt
+database.txt
+end-to-end-flow.md
+rela_state_strucuture.txt
+run_command
+design-patterns-and-sse.md
+AGENTS.md

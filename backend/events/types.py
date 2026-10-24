@@ -1,0 +1,15 @@
+"""Event type constants used across the system."""
+
+
+class EventType:
+    AGENT_START = "AGENT_START"
+    AGENT_SWITCH = "AGENT_SWITCH"
+    AGENT_COMPLETE = "AGENT_COMPLETE"
+    LLM_TOKEN = "LLM_TOKEN"
+    LLM_DONE = "LLM_DONE"
+    TOOL_CALL = "TOOL_CALL"
+    TOOL_RESULT = "TOOL_RESULT"
+    DATA_EXTRACTED = "DATA_EXTRACTED"
+    DATA_SAVED = "DATA_SAVED"
+    ERROR = "ERROR"
+    DONE = "DONE"
