@@ -6,6 +6,7 @@ from backend.agents.agent_factory import AgentFactory
 from backend.agents.prompts import RENT_AGENT_SYSTEM_PROMPT
 from backend.agents.schemas import RentExtraction
 from backend.repositories.property_repository import PropertyRepository
+from backend.observability.tracing import get_current_trace
 
 logger = logging.getLogger(__name__)
 
@@ -115,75 +116,73 @@ def _format_single_property(prop) -> str:
     return "\n".join(lines)
 
 
-def _build_property_table(properties: list) -> str:
-    """Build an HTML table directly from Property ORM objects.
+def _build_property_cards(properties: list) -> str:
+    """Build modern, responsive vertical property cards stacked one by one below each other.
 
-    Every cell is populated from actual database values — no LLM involvement.
+    Populated directly from database ORM records with one-click interactive selection.
     """
-    rows = []
+    cards = []
     idx = 0
     for prop in properties:
         for cfg in prop.configs:
             idx += 1
-            sharing = f"{cfg.sharing_type}-sharing" if cfg.sharing_type else "N/A"
-            bhk = f" ({cfg.bhk_type})" if cfg.bhk_type else ""
-            food = "✅" if cfg.food_included else "❌"
-            beds = f"{cfg.available_beds or '?'}/{cfg.total_beds or '?'}"
-            amenities = ", ".join(a.amenity_name for a in prop.amenities) if prop.amenities else "—"
-            rating = f"⭐ {prop.rating}" if prop.rating else "—"
-            gender = prop.gender_allowed or "Any"
-            lease = f"{cfg.lease_min_months} mo" if cfg.lease_min_months else "Flexible"
+            sharing = f"{cfg.sharing_type}-Sharing" if cfg.sharing_type else "Private Room"
+            bhk = f" • {cfg.bhk_type}" if cfg.bhk_type else ""
+            food_text = "Food Included" if cfg.food_included else "Self Cooking"
+            food_icon = "🍽️" if cfg.food_included else "🍳"
+            beds = f"{cfg.available_beds or '?'}/{cfg.total_beds or '?'} beds free"
+            rating = f"⭐ {prop.rating}" if prop.rating else "⭐ Highly Rated"
+            gender = f"👤 {prop.gender_allowed or 'Any Gender'}"
+            lease = f"📅 Min {cfg.lease_min_months} mo" if cfg.lease_min_months else "📅 Flexible lease"
 
-            rows.append(
-                f"<tr>"
-                f"<td>{idx}</td>"
-                f"<td><strong>{prop.title}</strong>{bhk}</td>"
-                f"<td>{prop.city}, {prop.area}</td>"
-                f"<td>₹{cfg.rent:,.0f}/mo</td>"
-                f"<td>{sharing}</td>"
-                f"<td>{beds}</td>"
-                f"<td>{food}</td>"
-                f"<td>{gender}</td>"
-                f"<td>{lease}</td>"
-                f"<td>{amenities}</td>"
-                f"<td>{rating}</td>"
-                f"<td><code>{prop.id[:8]}</code></td>"
-                f"</tr>"
+            amenity_chips = []
+            if prop.amenities:
+                for a in prop.amenities[:5]:
+                    amenity_chips.append(f'<span class="amenity-chip">{a.amenity_name}</span>')
+            amenities_html = "".join(amenity_chips) if amenity_chips else '<span class="amenity-chip">Standard Amenities</span>'
+
+            safe_title = (prop.title or "Property").replace("'", "\\'").replace('"', '&quot;')
+
+            cards.append(
+                f'<div class="property-card" data-idx="{idx}">'
+                f'<div class="property-card-header">'
+                f'  <div class="prop-badge-group">'
+                f'    <span class="prop-idx-badge">Option #{idx}</span>'
+                f'    <span class="prop-type-badge">{prop.property_type or "PG"}</span>'
+                f'    <span class="prop-rating-badge">{rating}</span>'
+                f'  </div>'
+                f'  <div class="prop-title-row">'
+                f'    <h4 class="prop-card-title">{prop.title}{bhk}</h4>'
+                f'    <div class="prop-price-tag">₹{cfg.rent:,.0f}<span>/mo</span></div>'
+                f'  </div>'
+                f'  <div class="prop-card-location">📍 {prop.city}, {prop.area}</div>'
+                f'</div>'
+                f'<div class="prop-card-specs">'
+                f'  <span class="spec-pill">👥 {sharing}</span>'
+                f'  <span class="spec-pill">🛏️ {beds}</span>'
+                f'  <span class="spec-pill">{food_icon} {food_text}</span>'
+                f'  <span class="spec-pill">{gender}</span>'
+                f'  <span class="spec-pill">{lease}</span>'
+                f'</div>'
+                f'<div class="prop-card-amenities">{amenities_html}</div>'
+                f'<div class="prop-card-actions">'
+                f'  <span class="prop-ref-id">ID: <code>{prop.id[:8]}</code></span>'
+                f'  <button type="button" class="property-select-btn" onclick="selectProperty({idx}, \'{safe_title}\')">'
+                f'    👉 Select Property #{idx}'
+                f'  </button>'
+                f'</div>'
+                f'</div>'
             )
 
-    # If no configs exist at all (edge case), fall back to one row per property
-    if not rows:
-        for i, prop in enumerate(properties, 1):
-            rows.append(
-                f"<tr>"
-                f"<td>{i}</td>"
-                f"<td><strong>{prop.title}</strong></td>"
-                f"<td>{prop.city}, {prop.area}</td>"
-                f"<td colspan='9'>No configuration details available</td>"
-                f"</tr>"
-            )
+    if not cards:
+        return '<p class="no-results-msg">No matching properties found.</p>'
 
-    table = (
-        '<div class="property-table-wrap">'
-        '<table class="property-table">'
-        "<thead><tr>"
-        "<th>#</th>"
-        "<th>Property</th>"
-        "<th>Location</th>"
-        "<th>Rent</th>"
-        "<th>Sharing</th>"
-        "<th>Beds (Avail/Total)</th>"
-        "<th>Food</th>"
-        "<th>Gender</th>"
-        "<th>Lease</th>"
-        "<th>Amenities</th>"
-        "<th>Rating</th>"
-        "<th>ID</th>"
-        "</tr></thead>"
-        "<tbody>" + "".join(rows) + "</tbody>"
-        "</table></div>"
-    )
-    return table
+    return f'<div class="property-cards-list">{"".join(cards)}</div>'
+
+
+def _build_property_table(properties: list) -> str:
+    """Backward-compatible helper that delegates to modern vertical card view."""
+    return _build_property_cards(properties)
 
 
 def _build_selection_index(properties: list) -> list:
@@ -268,6 +267,15 @@ class RentAgent(BaseAgent):
 
     async def _search_database(self, criteria: dict) -> list:
         """Query the property database using extracted search criteria."""
+        trace = get_current_trace()
+        span = None
+        if trace:
+            span = trace.start_span(
+                name="Database: Property Repository Search",
+                span_type="tool",
+                inputs=criteria,
+            )
+
         try:
             properties = await _property_repo.search_properties(
                 city=criteria.get("city"),
@@ -281,9 +289,16 @@ class RentAgent(BaseAgent):
                 f"[{self.session_id}] DB search returned {len(properties)} properties "
                 f"for criteria: {criteria}"
             )
+            if span:
+                span.finish(outputs={
+                    "matched_count": len(properties),
+                    "property_ids": [p.id for p in properties[:10]],
+                })
             return properties
         except Exception as e:
             logger.error(f"[{self.session_id}] DB search failed: {e}", exc_info=True)
+            if span:
+                span.finish(error=str(e))
             return []
 
     def _check_criteria_complete(self, extraction: RentExtraction) -> bool:
@@ -412,9 +427,8 @@ class RentAgent(BaseAgent):
             table_html = _build_property_table(properties_found)
 
             follow_up = (
-                "<br>👆 <strong>Please select a property by typing its number</strong> "
-                "(e.g., <em>1</em>, <em>select 2</em>, <em>first one</em>) "
-                "to proceed with your profile and booking."
+                "<br>👆 <strong>Click the button on any property above</strong> or type its number "
+                "(e.g., <em>1</em>, <em>select 2</em>) to proceed with your booking."
             )
 
             full_response = intro + table_html + follow_up

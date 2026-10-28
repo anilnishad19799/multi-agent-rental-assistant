@@ -19,6 +19,17 @@ class RedisPubSub(BasePubSub):
 
         return self.queues[channel]
 
+    def clear(self, channel: str):
+        """Drain and clear pending messages from channel queue."""
+        if channel in self.queues:
+            q = self.queues.pop(channel)
+            while not q.empty():
+                try:
+                    q.get_nowait()
+                except (asyncio.QueueEmpty, ValueError):
+                    break
+
+
     async def _listener(self, channel: str):
         pubsub = self.redis.pubsub()
         await pubsub.subscribe(channel)

@@ -9,3 +9,7 @@ class BasePubSub(ABC):
     @abstractmethod
     def subscribe(self, channel: str):
         pass
+
+    @abstractmethod
+    def clear(self, channel: str):
+        pass

@@ -21,6 +21,7 @@ from backend.models.booking import (  # noqa: F401
 from backend.models.memory import (  # noqa: F401
     SemanticMemoryRecord, EpisodicMemoryRecord, ProceduralMemoryRecord,
 )
+from backend.models.trace import TraceRecord  # noqa: F401
 
 __all__ = [
     "Base", "engine", "AsyncSessionLocal", "get_session", "init_db",
@@ -30,4 +31,5 @@ __all__ = [
     "SearchRequest", "SearchResult", "ShortlistedProperty", "Booking",
     "RealEstateAgent", "AgentAvailability",
     "SemanticMemoryRecord", "EpisodicMemoryRecord", "ProceduralMemoryRecord",
+    "TraceRecord",
 ]

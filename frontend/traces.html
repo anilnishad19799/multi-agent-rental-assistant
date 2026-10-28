@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LangSmith Observability — Multi-Agent Tracing & Debugging</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="traces.css?v=1">
+</head>
+<body class="langsmith-theme">
+
+<!-- ══════════════════════════════════════════════════════════════
+     ACCESS DENIED / AUTH GATE (For non-admin or unauthenticated)
+     ══════════════════════════════════════════════════════════════ -->
+<div id="access-denied-gate" class="access-denied-overlay hidden">
+    <div class="access-denied-card">
+        <div class="denied-icon">🔒</div>
+        <h2>Administrator Access Required</h2>
+        <p id="denied-message">This observability tracing dashboard is strictly restricted to system administrators (<strong>admin@gmail.com</strong>).</p>
+        
+        <div class="denied-actions">
+            <a href="/" class="btn btn-primary">← Go to Rental Assistant Login</a>
+            <button type="button" class="btn btn-secondary" onclick="promptAdminLogin()">Sign In as Admin</button>
+        </div>
+    </div>
+</div>
+
+<!-- Admin Quick Login Modal -->
+<div id="admin-login-modal" class="modal-backdrop hidden">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3>🛡️ Admin Authentication</h3>
+            <button type="button" class="close-btn" onclick="closeAdminLoginModal()">✕</button>
+        </div>
+        <form id="admin-login-form" onsubmit="handleAdminLogin(event)">
+            <div id="admin-login-error" class="login-alert hidden"></div>
+            <div class="form-group">
+                <label>Email Address</label>
+                <input type="email" id="admin-email" value="admin@gmail.com" required>
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="admin-password" placeholder="Enter admin password" value="Admin@1234" required>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block" id="admin-login-submit-btn">
+                <span>Unlock LangSmith Traces</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Cloud Setup Modal -->
+<div id="cloud-setup-modal" class="modal-backdrop hidden">
+    <div class="modal-box modal-wide">
+        <div class="modal-header">
+            <h3>☁️ LangSmith Cloud Integration Guide</h3>
+            <button type="button" class="close-btn" onclick="closeCloudSetupModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <p>Every multi-agent run in this application is instrumented with native LangSmith tracing. You can view traces in <strong>both this local dashboard</strong> and in the official <strong>LangSmith Cloud</strong> simultaneously!</p>
+            
+            <h4 style="margin-top:16px;">1. Enable Cloud Tracing in <code>.env</code></h4>
+            <div class="code-snippet-box">
+                <pre><code># Enable official LangSmith Cloud Tracing
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_API_KEY=lsv2_pt_your_langsmith_api_key_here
+LANGCHAIN_PROJECT=real-estate-rental-agent
+LANGCHAIN_ENDPOINT=https://api.smith.langchain.com</code></pre>
+            </div>
+
+            <h4 style="margin-top:16px;">2. Restart the Backend</h4>
+            <p>Restart your server. Every chat turn will immediately stream to your LangSmith project dashboard at <a href="https://smith.langchain.com" target="_blank">smith.langchain.com</a>!</p>
+
+            <h4 style="margin-top:16px;">3. Direct Cloud Dashboard Access</h4>
+            <p>Once your API key is configured, click the "Open LangSmith Cloud ↗" button in the top bar to inspect cloud traces with LangSmith latency graphs, token counters, and dataset evaluation.</p>
+        </div>
+        <div class="modal-footer">
+            <a href="https://smith.langchain.com" target="_blank" class="btn btn-primary">Open LangSmith Cloud ↗</a>
+            <button type="button" class="btn btn-secondary" onclick="closeCloudSetupModal()">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     MAIN LANGSMITH DASHBOARD
+     ══════════════════════════════════════════════════════════════ -->
+<div id="langsmith-app" class="langsmith-layout">
+    
+    <!-- Top LangSmith Navbar -->
+    <header class="ls-navbar">
+        <div class="ls-brand">
+            <div class="ls-logo">
+                <span class="ls-logo-icon">🦜🛠️</span>
+                <span class="ls-brand-name">LangSmith</span>
+            </div>
+            <div class="ls-breadcrumb">
+                <span class="crumb-dim">default</span>
+                <span class="crumb-sep">/</span>
+                <span class="crumb-dim">projects</span>
+                <span class="crumb-sep">/</span>
+                <span class="crumb-active">real-estate-rental-agent</span>
+            </div>
+        </div>
+
+        <div class="ls-nav-center">
+            <div id="cloud-status-badge" class="cloud-status-pill" onclick="openCloudSetupModal()" title="Click to view LangSmith Cloud setup">
+                <span class="status-dot"></span>
+                <span id="cloud-status-text">Checking LangSmith Cloud...</span>
+            </div>
+            <a id="cloud-direct-btn" href="https://smith.langchain.com" target="_blank" class="btn btn-outline-light btn-xs">
+                Open LangSmith Cloud ↗
+            </a>
+            <button type="button" class="btn btn-ghost btn-xs" onclick="openCloudSetupModal()">
+                ⚙️ Setup Guide
+            </button>
+        </div>
+
+        <div class="ls-nav-right">
+            <div class="admin-user-pill">
+                <span class="admin-avatar">A</span>
+                <div class="admin-meta">
+                    <span class="admin-email-text" id="admin-user-email">admin@gmail.com</span>
+                    <span class="admin-role-badge">System Administrator</span>
+                </div>
+            </div>
+            <a href="/" class="btn btn-outline-light btn-sm" title="Return to Rental Assistant Chat">
+                ← Back to Chat
+            </a>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="handleAdminLogout()">
+                Sign Out
+            </button>
+        </div>
+    </header>
+
+    <!-- Project Metrics Bar -->
+    <section class="ls-metrics-bar">
+        <div class="metric-card">
+            <div class="metric-label">Total Multi-Agent Runs</div>
+            <div class="metric-value" id="metric-total-runs">--</div>
+            <div class="metric-sub" id="metric-total-sub">Supervisor + Specialists</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Monitored Users</div>
+            <div class="metric-value" id="metric-users-count">--</div>
+            <div class="metric-sub">Isolated user-wise sessions</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Avg Total Latency</div>
+            <div class="metric-value" id="metric-avg-latency">--</div>
+            <div class="metric-sub">End-to-end multi-agent flow</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Success Rate</div>
+            <div class="metric-value success-accent" id="metric-success-rate">--</div>
+            <div class="metric-sub" id="metric-error-sub">0 errors recorded</div>
+        </div>
+    </section>
+
+    <!-- Filters & User Selector Toolbar -->
+    <section class="ls-toolbar">
+        <div class="toolbar-left">
+            <!-- User-Wise Filter -->
+            <div class="filter-item filter-user-select">
+                <label for="filter-user">👤 User:</label>
+                <select id="filter-user" onchange="handleFilterChange()">
+                    <option value="">All Users (Global)</option>
+                </select>
+            </div>
+
+            <!-- Agent Filter -->
+            <div class="filter-item">
+                <label for="filter-agent">🤖 Agent:</label>
+                <select id="filter-agent" onchange="handleFilterChange()">
+                    <option value="">All Agents</option>
+                    <option value="supervisor">Supervisor Agent</option>
+                    <option value="rent">Rent Specialist</option>
+                    <option value="calendar">Calendar & Visits</option>
+                    <option value="user_info">Profile Assistant</option>
+                    <option value="general">Rental Concierge</option>
+                </select>
+            </div>
+
+            <!-- Status Filter -->
+            <div class="filter-item">
+                <label for="filter-status">Status:</label>
+                <select id="filter-status" onchange="handleFilterChange()">
+                    <option value="">All Statuses</option>
+                    <option value="SUCCESS">Completed (Success)</option>
+                    <option value="ERROR">Errored</option>
+                </select>
+            </div>
+
+            <!-- Search Query -->
+            <div class="filter-item filter-search">
+                <input type="text" id="filter-search-input" placeholder="Search prompt, trace ID, agent..." oninput="handleSearchInput()">
+            </div>
+        </div>
+
+        <div class="toolbar-right">
+            <span class="results-count" id="results-count-label">Loading runs...</span>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="refreshTraces()" id="refresh-btn">
+                🔄 Refresh Runs
+            </button>
+        </div>
+    </section>
+
+    <!-- User-Wise Quick Tabs Bar -->
+    <section class="user-tabs-bar" id="user-tabs-bar">
+        <span class="user-tab-label">User Traces:</span>
+        <button type="button" class="user-tab-btn active" data-email="" onclick="selectUserTab('')">All Users</button>
+        <!-- Dynamic user pill buttons injected here -->
+    </section>
+
+    <!-- LangSmith Main Content Split View -->
+    <main class="ls-main-split">
+        
+        <!-- Left: Runs Table (LangSmith Runs List) -->
+        <div class="ls-runs-table-container">
+            <table class="ls-runs-table" id="runs-table">
+                <thead>
+                    <tr>
+                        <th style="width: 220px;">Run / Root Span</th>
+                        <th style="width: 170px;">User Account</th>
+                        <th style="width: 170px;">Agent Flow</th>
+                        <th>User Query Preview</th>
+                        <th style="width: 90px;">Latency</th>
+                        <th style="width: 70px;">Spans</th>
+                        <th style="width: 100px;">Status</th>
+                        <th style="width: 110px;">Time</th>
+                    </tr>
+                </thead>
+                <tbody id="runs-tbody">
+                    <tr>
+                        <td colspan="8" class="table-loading-row">Loading LangSmith traces...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Right: Execution Tree & Inspector Drawer (LangSmith Right Drawer) -->
+        <aside class="ls-inspector-drawer" id="ls-inspector-drawer">
+            <div class="drawer-empty-state" id="drawer-empty-state">
+                <div class="empty-icon">📊</div>
+                <h3>Select a run to inspect</h3>
+                <p>Click on any request in the LangSmith runs table to view the full multi-agent execution tree, supervisor routing, tool parameters, and LLM streaming tokens.</p>
+            </div>
+
+            <div class="drawer-content hidden" id="drawer-content">
+                <!-- Drawer Header -->
+                <div class="drawer-header">
+                    <div class="drawer-title-group">
+                        <div class="run-type-tag" id="drawer-run-type">CHAIN</div>
+                        <h3 id="drawer-run-name">multi_agent_orchestrator</h3>
+                        <span class="run-id-pill" id="drawer-run-id" title="Click to copy Trace ID" onclick="copyTraceId()">...</span>
+                    </div>
+                    <div class="drawer-header-meta">
+                        <span class="status-pill" id="drawer-run-status">COMPLETED</span>
+                        <span class="latency-text" id="drawer-run-latency">0 ms</span>
+                    </div>
+                </div>
+
+                <!-- Run Overview Metadata Bar -->
+                <div class="drawer-meta-bar">
+                    <div class="d-meta-item">
+                        <span class="d-meta-label">User</span>
+                        <span class="d-meta-val" id="drawer-meta-user">--</span>
+                    </div>
+                    <div class="d-meta-item">
+                        <span class="d-meta-label">Session ID</span>
+                        <span class="d-meta-val" id="drawer-meta-session">--</span>
+                    </div>
+                    <div class="d-meta-item">
+                        <span class="d-meta-label">Endpoint</span>
+                        <span class="d-meta-val" id="drawer-meta-endpoint">/api/chat</span>
+                    </div>
+                    <div class="d-meta-item">
+                        <span class="d-meta-label">Timestamp</span>
+                        <span class="d-meta-val" id="drawer-meta-time">--</span>
+                    </div>
+                </div>
+
+                <!-- Execution Tree (LangSmith Run Tree) -->
+                <div class="drawer-section">
+                    <div class="section-title">
+                        <span>🌳 Execution Tree (Multi-Agent Spans)</span>
+                        <span class="section-count" id="drawer-spans-count">0 spans</span>
+                    </div>
+                    <div class="run-tree-container" id="run-tree-container">
+                        <!-- Spans tree rendered dynamically -->
+                    </div>
+                </div>
+
+                <!-- Selected Node Tabbed Inspector -->
+                <div class="drawer-section">
+                    <div class="section-title">
+                        <span id="selected-node-title">📋 Span Inspection</span>
+                        <span class="selected-node-type-badge" id="selected-node-type">ROOT</span>
+                    </div>
+
+                    <div class="node-tabs">
+                        <button type="button" class="node-tab-btn active" data-tab="tab-inputs" onclick="switchNodeTab('tab-inputs')">Inputs</button>
+                        <button type="button" class="node-tab-btn" data-tab="tab-outputs" onclick="switchNodeTab('tab-outputs')">Outputs</button>
+                        <button type="button" class="node-tab-btn" data-tab="tab-metadata" onclick="switchNodeTab('tab-metadata')">Metadata</button>
+                        <button type="button" class="node-tab-btn" data-tab="tab-raw" onclick="switchNodeTab('tab-raw')">Raw Trace</button>
+                    </div>
+
+                    <div class="node-tab-content" id="tab-inputs">
+                        <div class="code-view-box" id="node-inputs-content">--</div>
+                    </div>
+                    <div class="node-tab-content hidden" id="tab-outputs">
+                        <div class="code-view-box" id="node-outputs-content">--</div>
+                    </div>
+                    <div class="node-tab-content hidden" id="tab-metadata">
+                        <div class="code-view-box" id="node-metadata-content">--</div>
+                    </div>
+                    <div class="node-tab-content hidden" id="tab-raw">
+                        <div class="code-view-box" id="node-raw-content">--</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </main>
+</div>
+
+<!-- Toast notification banner -->
+<div id="ls-toast" class="ls-toast hidden"></div>
+
+<script src="traces.js?v=1"></script>
+</body>
+</html>

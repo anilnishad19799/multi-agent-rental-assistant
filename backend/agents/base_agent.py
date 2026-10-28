@@ -5,6 +5,7 @@ AgentMemory now properly integrates:
   - LongTermMemory (persistent: semantic + episodic + procedural)
   - ContextRetriever (assembles full context for LLM prompts)
 """
+import asyncio
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -18,6 +19,7 @@ from backend.memory.short_term import ThreadMemory
 from backend.memory.long_term import LongTermMemory
 from backend.memory.retrieval import ContextRetriever
 from backend.services.llm.llm_factory import LLMFactory
+from backend.observability.tracing import get_current_trace, traceable
 
 logger = logging.getLogger(__name__)
 
@@ -241,6 +243,15 @@ class BaseAgent(ABC):
         client = LLMFactory.get_llm_client(self.provider)
         full_response = ""
 
+        trace = get_current_trace()
+        span = None
+        if trace:
+            span = trace.start_span(
+                name=f"{self.agent_name.capitalize()} LLM Stream ({self.provider})",
+                span_type="llm",
+                inputs={"message_count": len(messages), "provider": self.provider},
+            )
+
         try:
             async for token in client.stream(messages):
                 full_response += token
@@ -254,9 +265,19 @@ class BaseAgent(ABC):
             await publish_event(self.session_id, EventType.LLM_DONE, {
                 "agent": self.agent_name
             })
+            if span:
+                span.finish(outputs={"response_length": len(full_response), "response_preview": full_response[:300]})
+
+        except asyncio.CancelledError:
+            logger.info(f"[{self.agent_name}] LLM streaming cancelled by user")
+            if span:
+                span.finish(outputs={"response_length": len(full_response), "cancelled": True}, status="STOPPED")
+            raise
 
         except Exception as e:
             logger.error(f"Error streaming from {self.agent_name}: {e}", exc_info=True)
+            if span:
+                span.finish(error=str(e))
             await publish_event(self.session_id, EventType.ERROR, {
                 "error": str(e), "agent": self.agent_name
             })
@@ -321,12 +342,23 @@ class BaseAgent(ABC):
         import backend.services.llm  # noqa: F401
         client = LLMFactory.get_llm_client(self.provider)
 
+        trace = get_current_trace()
+        span = None
+        if trace:
+            span = trace.start_span(
+                name=f"{self.agent_name.capitalize()} Structured Output ({schema.__name__})",
+                span_type="llm",
+                inputs={"schema": schema.__name__, "provider": self.provider},
+            )
+
         try:
             result = await client.structured_output(messages, schema)
             logger.info(
                 f"[{self.agent_name}] Structured extraction: "
                 f"{result.model_dump(exclude_none=True)}"
             )
+            if span:
+                span.finish(outputs=result.model_dump(exclude_none=True))
             return result
 
         except Exception as e:
@@ -334,6 +366,8 @@ class BaseAgent(ABC):
                 f"[{self.agent_name}] Structured output failed: {e}",
                 exc_info=True,
             )
+            if span:
+                span.finish(error=str(e))
             # Re-raise — callers should handle the failure rather than
             # receiving an invalid schema instance with missing fields.
             raise

@@ -33,7 +33,7 @@ def _generate_upcoming_slots():
 
 
 def _build_slots_table(selected_property: Optional[dict] = None) -> str:
-    """Build a rich, interactive HTML table showing upcoming visit slots."""
+    """Build a rich, interactive HTML view showing upcoming visit slots stacked day-by-day."""
     prop_title = selected_property.get("title", "the property") if selected_property else "the property"
     city = selected_property.get("city", "") if selected_property else ""
     area = selected_property.get("area", "") if selected_property else ""
@@ -41,35 +41,26 @@ def _build_slots_table(selected_property: Optional[dict] = None) -> str:
     prop_desc = f"<strong>{prop_title}</strong>" + (f" ({loc_str})" if loc_str else "")
 
     slots = _generate_upcoming_slots()
-    rows = []
+    cards = []
     for s in slots:
         date_disp = s["date_display"]
         btn_list = []
         for t in s["times"]:
             btn_list.append(
-                f'<button type="button" class="slot-pill-btn" onclick="selectSlot(\'{date_disp}\', \'{t}\')" '
-                f'style="background:#e8f0fe; color:#1a73e8; border:1px solid #1a73e8; padding:5px 10px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; margin:2px 3px; display:inline-block;">⏰ {t}</button>'
+                f'<button type="button" class="slot-pill-btn" onclick="selectSlot(\'{date_disp}\', \'{t}\')">⏰ {t}</button>'
             )
         buttons = " ".join(btn_list)
-        rows.append(
-            f'<tr style="border-bottom:1px solid #e0e0e0;">'
-            f'<td style="padding:10px 12px; font-weight:600; color:#202124; white-space:nowrap;">📅 {date_disp}</td>'
-            f'<td style="padding:10px 12px; color:#5f6368;">{s["day"]}</td>'
-            f'<td style="padding:8px 12px;">{buttons}</td>'
-            f'</tr>'
+        cards.append(
+            f'<div class="slot-day-card" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; padding:12px 14px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; box-shadow:0 1px 2px rgba(0,0,0,0.04);">'
+            f'  <div style="font-weight:600; color:#0f172a; min-width:140px;">📅 {date_disp} <span style="font-size:12px; font-weight:500; color:#64748b;">({s["day"]})</span></div>'
+            f'  <div style="display:flex; flex-wrap:wrap; gap:6px;">{buttons}</div>'
+            f'</div>'
         )
 
-    table_html = (
-        '<div class="property-table-wrap" style="margin:12px 0; overflow-x:auto;">'
-        '<table class="slots-table" style="width:100%; border-collapse:collapse; border:1px solid #d2e3fc; border-radius:8px; overflow:hidden; background:#fff; font-size:13px; font-family:inherit;">'
-        '<thead><tr style="background:#1a73e8; color:#fff;">'
-        '<th style="padding:10px 12px; text-align:left; font-weight:600; border:1px solid #1558b0;">Date</th>'
-        '<th style="padding:10px 12px; text-align:left; font-weight:600; border:1px solid #1558b0;">Day</th>'
-        '<th style="padding:10px 12px; text-align:left; font-weight:600; border:1px solid #1558b0;">Available 1-Hour Slots (Click to Select)</th>'
-        '</tr></thead>'
-        '<tbody>'
-        + "".join(rows)
-        + '</tbody></table></div>'
+    slots_html = (
+        '<div class="slots-container" style="margin:12px 0;">'
+        + "".join(cards)
+        + '</div>'
     )
 
     intro = (
@@ -83,7 +74,7 @@ def _build_slots_table(selected_property: Optional[dict] = None) -> str:
         "(e.g., <em>10 Nov 2026 at 10 AM</em>), and I’ll prepare your booking! 🚀"
     )
 
-    return intro + table_html + follow_up
+    return intro + slots_html + follow_up
 
 
 def _format_time_slot(time_str: str) -> str:

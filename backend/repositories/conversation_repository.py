@@ -1,6 +1,7 @@
 """Conversation repository — messages, memory, conversation management."""
 import logging
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
+from uuid import uuid4
 from sqlalchemy import select, and_
 from backend.models.base import get_session
 from backend.models import (
@@ -16,20 +17,70 @@ class ConversationRepository(BaseRepository[Conversation]):
     def __init__(self):
         super().__init__(Conversation)
 
-    async def get_or_create_conversation(self, session_id: str) -> Conversation:
+    async def get_or_create_conversation(self, session_id: str, user_id: Optional[str] = None) -> Conversation:
         async with get_session() as session:
             stmt = select(Conversation).where(Conversation.session_id == session_id)
             result = await session.execute(stmt)
             conv = result.scalar_one_or_none()
             if conv:
+                # If this session belongs to another user, DO NOT allow sharing/cross-contamination!
+                if conv.user_id and user_id and conv.user_id != user_id:
+                    logger.warning(
+                        f"Session {session_id} belongs to user {conv.user_id}, but requested by {user_id}. Creating new isolated conversation."
+                    )
+                    new_session_id = str(uuid4())
+                    new_conv = Conversation(session_id=new_session_id, user_id=user_id)
+                    session.add(new_conv)
+                    await session.commit()
+                    await session.refresh(new_conv)
+                    return new_conv
+
+                if user_id and not conv.user_id:
+                    conv.user_id = user_id
+                    await session.commit()
+                    await session.refresh(conv)
                 return conv
 
-            conv = Conversation(session_id=session_id)
+            conv = Conversation(session_id=session_id, user_id=user_id)
             session.add(conv)
             await session.commit()
             await session.refresh(conv)
-            logger.info(f"Created conversation for session {session_id}")
+            logger.info(f"Created conversation for session {session_id} with user {user_id}")
             return conv
+
+    async def get_latest_conversation_for_user(self, user_id: str) -> Optional[Conversation]:
+        """Fetch the most recent conversation owned by a specific user."""
+        if not user_id:
+            return None
+        async with get_session() as session:
+            stmt = (
+                select(Conversation)
+                .where(Conversation.user_id == user_id)
+                .order_by(Conversation.updated_at.desc())
+                .limit(1)
+            )
+            result = await session.execute(stmt)
+            return result.scalar_one_or_none()
+
+    async def get_user_conversation_messages(self, user_id: str, limit: int = 50) -> Dict[str, Any]:
+        """Fetch all messages from the latest conversation of a specific user."""
+        conv = await self.get_latest_conversation_for_user(user_id)
+        if not conv:
+            return {"session_id": None, "messages": []}
+        messages = await self.get_conversation_history(conv.session_id, limit=limit)
+        return {
+            "session_id": conv.session_id,
+            "messages": [
+                {
+                    "id": m.id,
+                    "sender": m.sender_type,
+                    "agent": m.agent_type,
+                    "content": m.content,
+                    "created_at": m.created_at.isoformat() if m.created_at else None,
+                }
+                for m in messages
+            ]
+        }
 
     async def add_message(
         self, conversation_id: str, sender_type: str,

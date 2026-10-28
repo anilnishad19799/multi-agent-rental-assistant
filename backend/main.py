@@ -11,6 +11,8 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.api.routes import router as chat_router
 from backend.api.stream import router as stream_router
+from backend.api.auth import router as auth_router
+from backend.api.traces import router as traces_router
 from backend.config.logging_config import setup_logging
 
 # Register ALL SQLAlchemy models before any query can fire
@@ -34,11 +36,15 @@ app.add_middleware(
 # API routes
 app.include_router(chat_router, prefix="/api")
 app.include_router(stream_router, prefix="/api")
+app.include_router(auth_router, prefix="/api/auth")
+app.include_router(traces_router, prefix="/api")
 
 
 @app.on_event("startup")
 async def startup():
     await init_db()
+    from backend.repositories.user_repository import UserRepository
+    await UserRepository().ensure_admin_user()
 
 
 # Health check

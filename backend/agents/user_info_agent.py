@@ -27,42 +27,40 @@ def _build_info_form(missing_fields: list, existing_profile: dict) -> str:
     This is built in Python (not by the LLM) to guarantee correct HTML
     rendering — same pattern as the rent agent's property table.
     """
-    # Show already-collected fields at the top
-    collected_rows = []
+    # Show already-collected fields as completed cards
+    collected_cards = []
     for field_name, label, _hint in _USER_INFO_FIELDS:
         if field_name not in missing_fields and field_name in existing_profile:
             value = existing_profile[field_name]
-            collected_rows.append(
-                f'<tr><td><strong>{label}</strong></td>'
-                f'<td style="color:#0d652d;">✅ {value}</td></tr>'
+            collected_cards.append(
+                f'<div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:9px 12px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">'
+                f'  <span style="font-weight:600; color:#166534; font-size:13px;">{label}</span>'
+                f'  <span style="color:#15803d; font-weight:600; font-size:13px;">✅ {value}</span>'
+                f'</div>'
             )
 
-    # Build rows for missing fields
-    missing_rows = []
+    # Build cards for missing fields
+    missing_cards = []
     for field_name, label, hint in _USER_INFO_FIELDS:
         if field_name in missing_fields:
-            hint_text = f'<span style="color:#888;">{hint}</span>' if hint else '___'
-            missing_rows.append(
-                f'<tr><td><strong>{label}</strong></td>'
-                f'<td>{hint_text}</td></tr>'
+            hint_text = f' <span style="color:#94a3b8; font-weight:400; font-size:12px;">({hint})</span>' if hint else ''
+            missing_cards.append(
+                f'<div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:9px 12px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 1px 2px rgba(0,0,0,0.03);">'
+                f'  <span style="font-weight:600; color:#334155; font-size:13px;">{label}{hint_text}</span>'
+                f'  <span style="color:#d97706; font-size:11px; font-weight:700; background:#fef3c7; padding:2px 8px; border-radius:12px;">Needs Answer</span>'
+                f'</div>'
             )
 
-    if not missing_rows:
+    if not missing_cards:
         return ""
 
     intro = "To match you with the best options, please fill in the details below:<br><br>"
 
-    table = (
-        '<div class="property-table-wrap" style="margin:12px 0; overflow-x:auto;">'
-        '<table class="info-form-table" style="width:100%; border-collapse:collapse; border:1px solid #d2e3fc; border-radius:8px; overflow:hidden; background:#fff; font-size:13px;">'
-        '<thead><tr style="background:#1a73e8; color:#fff;">'
-        '<th style="padding:10px 12px; text-align:left; font-weight:600; border:1px solid #1558b0;">Field</th>'
-        '<th style="padding:10px 12px; text-align:left; font-weight:600; border:1px solid #1558b0;">Your Answer</th>'
-        '</tr></thead>'
-        '<tbody>'
-        + "".join(collected_rows)
-        + "".join(missing_rows)
-        + '</tbody></table></div>'
+    cards_wrap = (
+        '<div class="info-cards-list" style="margin:12px 0;">'
+        + "".join(collected_cards)
+        + "".join(missing_cards)
+        + '</div>'
     )
 
     follow_up = (
@@ -70,7 +68,7 @@ def _build_info_form(missing_fields: list, existing_profile: dict) -> str:
         "— I'll pick them up automatically! 🚀"
     )
 
-    return intro + table + follow_up
+    return intro + cards_wrap + follow_up
 
 
 def _build_profile_summary(profile: dict, selected_property: dict = None) -> str:

@@ -15,10 +15,72 @@ class UserRepository(BaseRepository[User]):
         super().__init__(User)
 
     async def get_by_email(self, email: str) -> Optional[User]:
+        if not email:
+            return None
+        clean_email = email.strip().lower()
         async with get_session() as session:
-            stmt = select(User).where(User.email == email)
+            stmt = select(User).where(User.email == clean_email)
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
+
+    async def create_user_with_password(
+        self,
+        email: str,
+        password_hash: str,
+        name: str,
+        phone: Optional[str] = None,
+        is_admin: bool = False,
+    ) -> User:
+        """Create a new registered user with hashed password."""
+        return await self.create(
+            email=email.strip().lower(),
+            password_hash=password_hash,
+            name=name.strip(),
+            phone=phone.strip() if phone else None,
+            is_admin=is_admin,
+        )
+
+    async def ensure_admin_user(
+        self,
+        email: str = "admin@gmail.com",
+        password: str = "Admin@1234",
+    ) -> User:
+        """Ensure the administrator account exists with designated password and privileges."""
+        clean_email = email.strip().lower()
+        from backend.services.auth_service import hash_password, verify_password
+
+        existing = await self.get_by_email(clean_email)
+        if existing:
+            needs_update = False
+            if not existing.is_admin:
+                needs_update = True
+            if not verify_password(password, existing.password_hash):
+                needs_update = True
+
+            if needs_update:
+                new_pw_hash = hash_password(password)
+                async with get_session() as session:
+                    stmt = select(User).where(User.id == existing.id)
+                    res = await session.execute(stmt)
+                    u = res.scalar_one_or_none()
+                    if u:
+                        u.is_admin = True
+                        u.password_hash = new_pw_hash
+                        if not u.name or u.name == "Admin":
+                            u.name = "System Admin"
+                        await session.commit()
+                        logger.info(f"Updated administrator account credentials: {clean_email}")
+            return existing
+
+        pw_hash = hash_password(password)
+        admin_user = await self.create_user_with_password(
+            email=clean_email,
+            password_hash=pw_hash,
+            name="System Admin",
+            is_admin=True,
+        )
+        logger.info(f"Initialized default administrator account: {clean_email}")
+        return admin_user
 
     async def get_preferences(self, user_id: str) -> Optional[UserPreference]:
         async with get_session() as session:

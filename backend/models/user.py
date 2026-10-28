@@ -25,6 +25,8 @@ class User(Base):
     citizenship = Column(String, nullable=True)  # INDIAN / FOREIGN
     email = Column(String, nullable=True, unique=True)
     phone = Column(String, nullable=True)
+    password_hash = Column(String, nullable=True)
+    is_admin = Column(Boolean, default=False)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
